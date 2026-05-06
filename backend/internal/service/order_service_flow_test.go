@@ -116,6 +116,10 @@ func (s *stubStockEngine) WarmUp(ctx context.Context, activityID uint64, stock i
 	return nil
 }
 
+func (s *stubStockEngine) SetStock(ctx context.Context, activityID uint64, stock int) error {
+	return nil
+}
+
 type stubNotificationService struct {
 	expireNotified int
 	lastOrderID    uint64

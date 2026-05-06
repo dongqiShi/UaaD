@@ -151,6 +151,7 @@ cp .env.example .env  # 可选，默认值即可本地运行
 | `KAFKA_TOPIC_ENROLLMENT` | `enrollment_requests` | Kafka 报名队列 Topic |
 | `REG_RATE_LIMIT_PER_MIN` | `5` | 注册接口限流（每分钟） |
 | `CORS_ALLOWED_ORIGINS` | 空 | 逗号分隔的 CORS 白名单。开发态留空=放开；生产态留空=默认拒绝跨域 |
+| `STOCK_RECONCILE_MINUTES` | `10` | Redis 库存一致性巡检频率（分钟），自动修复与 DB 计算值不一致的库存 |
 
 生产部署建议显式配置 `APP_ENV=production` 与 `CORS_ALLOWED_ORIGINS`，避免跨域策略误放开。
 
@@ -176,6 +177,7 @@ curl http://localhost:8080/api/v1/health
 
 - 后端会为每个请求返回 `X-Request-ID` 响应头。
 - 若客户端已传入 `X-Request-ID`，后端会沿用该值，便于前后端与网关日志串联排障。
+- 后端会后台定时执行库存巡检（`STOCK_RECONCILE_MINUTES`），发现 Redis 库存漂移会自动修复并输出 `[StockReconcile]` 日志。
 
 ### 4.3 Seed 数据导入
 

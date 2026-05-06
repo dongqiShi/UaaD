@@ -36,6 +36,10 @@ type StockEngine interface {
 	// WarmUp pre-loads the stock value into Redis and resets the enrolled set
 	// for a given activity. Typically called when an activity is published.
 	WarmUp(ctx context.Context, activityID uint64, stock int) error
+
+	// SetStock updates only Redis stock key without touching enrolled set.
+	// Used by reconciliation jobs to heal stock drift safely.
+	SetStock(ctx context.Context, activityID uint64, stock int) error
 }
 
 // --- key helpers (SPRINT2 convention) ---
@@ -131,4 +135,8 @@ func (e *redisStockEngine) WarmUp(ctx context.Context, activityID uint64, stock 
 	pipe.Del(ctx, enrolledSetKey(activityID))
 	_, err := pipe.Exec(ctx)
 	return err
+}
+
+func (e *redisStockEngine) SetStock(ctx context.Context, activityID uint64, stock int) error {
+	return e.rdb.Set(ctx, stockKey(activityID), stock, 0).Err()
 }

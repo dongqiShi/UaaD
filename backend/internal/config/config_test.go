@@ -8,6 +8,7 @@ import (
 func TestLoad_CORSAllowedOrigins(t *testing.T) {
 	t.Setenv("CORS_ALLOWED_ORIGINS", "http://localhost:5173, https://uaad.example.com ,")
 	t.Setenv("APP_ENV", "production")
+	t.Setenv("STOCK_RECONCILE_MINUTES", "15")
 	cfg := Load()
 
 	if cfg.AppEnv != "production" {
@@ -21,6 +22,9 @@ func TestLoad_CORSAllowedOrigins(t *testing.T) {
 	}
 	if cfg.CORSAllowedOrigins[1] != "https://uaad.example.com" {
 		t.Fatalf("unexpected second origin: %s", cfg.CORSAllowedOrigins[1])
+	}
+	if cfg.StockReconcileMinutes != 15 {
+		t.Fatalf("unexpected stock reconcile minutes: %d", cfg.StockReconcileMinutes)
 	}
 }
 

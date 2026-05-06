@@ -84,6 +84,7 @@ func main() {
 	orderSvc := service.NewOrderService(orderRepo, activityRepo, stockEngine, notifSvc)
 	behaviorSvc := service.NewBehaviorService(behaviorRepo)
 	recommendSvc := service.NewRecommendationService(recommendRepo, cfg.Scoring, 5*time.Minute)
+	stockReconciler := service.NewStockReconciler(activityRepo, enrollmentRepo, stockEngine, 200)
 
 	activityHandler := handler.NewActivityHandler(activitySvc)
 	enrollmentHandler := handler.NewEnrollmentHandler(enrollmentSvc)
@@ -171,6 +172,24 @@ func main() {
 		runPeriodicWithInitial(appCtx, interval, func(ctx context.Context) {
 			if err := recommendSvc.RecalculateAllScores(ctx); err != nil {
 				log.Printf("[RecommendScore] periodic recalc error: %v", err)
+			}
+		})
+	}()
+
+	// ── Stock Reconciliation (Redis stock self-heal) ────────────────────
+	go func() {
+		interval := time.Duration(cfg.StockReconcileMinutes) * time.Minute
+		if interval <= 0 {
+			interval = 10 * time.Minute
+		}
+		runPeriodicWithInitial(appCtx, interval, func(ctx context.Context) {
+			result, err := stockReconciler.Reconcile(ctx)
+			if err != nil {
+				log.Printf("[StockReconcile] error: %v", err)
+				return
+			}
+			if result.Repaired > 0 {
+				log.Printf("[StockReconcile] repaired=%d checked=%d", result.Repaired, result.Checked)
 			}
 		})
 	}()
