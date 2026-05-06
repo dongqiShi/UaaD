@@ -106,6 +106,7 @@ func main() {
 	// ── Router ──────────────────────────────────────────────────────
 	r := gin.Default()
 
+	r.Use(middleware.RequestID())
 	r.Use(middleware.PrometheusMiddleware())
 	r.Use(cors.New(cors.Config{
 		AllowAllOrigins: true,

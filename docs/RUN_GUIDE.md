@@ -167,6 +167,11 @@ curl http://localhost:8080/api/v1/health
 # 预期：HTTP 200
 ```
 
+**请求追踪（Request ID）：**
+
+- 后端会为每个请求返回 `X-Request-ID` 响应头。
+- 若客户端已传入 `X-Request-ID`，后端会沿用该值，便于前后端与网关日志串联排障。
+
 ### 4.3 Seed 数据导入
 
 **首次启动或清库后必须执行**（后端会自动 AutoMigrate 建表，但需要 Seed 导入初始数据）：
