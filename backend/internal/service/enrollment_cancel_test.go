@@ -151,7 +151,7 @@ func (s *stubStockEngineForCancel) WarmUp(ctx context.Context, activityID uint64
 
 func TestEnrollmentCancel_Queuing(t *testing.T) {
 	enrollRepo := &stubEnrollmentRepo{
-		enrollment: &domain.Enrollment{ID: 1, UserID: 10, ActivityID: 99, Status: "QUEUING"},
+		enrollment:              &domain.Enrollment{ID: 1, UserID: 10, ActivityID: 99, Status: "QUEUING"},
 		updateFromQueuingResult: true,
 	}
 	orderRepo := &stubOrderRepoForCancel{}
