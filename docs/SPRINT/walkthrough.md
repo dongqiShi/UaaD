@@ -435,3 +435,77 @@ go test ./pkg/...                         # PASS
 | 6 闭环测试支撑 | ✅ tests/sprint3_*.go 系列 |
 | 7 自主取消机制 | ✅ 已通过 commit `ee4507c` |
 | 8 活动逾期转 OFFLINE | ✅ 本次完成 |
+
+---
+
+## 2026-05-09 · Sprint3 §三 第一组 DoD 严格验收
+
+### 背景
+对照 SPRINT3 §三 第一组的 6 条 DoD（验收标准）逐条审计代码，发现两个隐性断点：
+
+1. **DoD 4「主动取消不重复回补」缺乏并发竞态测试** — 服务层只有 stub 单测，没有
+   验证 Cancel/Pay/ScanExpired 三方并发时 stock rollback 必然 ≤ 1 次的硬性保证。
+
+2. **DoD 5「行为 → 热度 → 推荐排序变化可观测」存在断点** — `BehaviorService.Submit`
+   只写 `user_behaviors` 表，**`activities.view_count` 永远是 0**；而
+   `RecalculateAllScores` 的打分公式直接读 `a.ViewCount`：
+   ```
+   viewScore := math.Log(1 + float64(a.ViewCount))  // 永远 = log(1) = 0
+   ```
+   → 行为埋点对推荐排序零影响。
+
+### 主要变更（2 commit）
+
+#### Commit 1: `fix(behavior)` — VIEW 行为驱动 view_count
+- `repository.ActivityRepository`：新增 `IncrementViewCount(activityID) error`
+- `service.BehaviorService`：注入 `activityRepo`，Submit/SubmitBatch 在
+  `behavior_type=VIEW` 时 best-effort 调用 IncrementViewCount
+- `cmd/server/main.go`：`NewBehaviorService(behaviorRepo, activityRepo)`
+- 关键设计：
+  - 仅 VIEW 触发，CLICK/SHARE/COLLECT/SEARCH 不污染 view_count
+  - IncrementViewCount 失败只记日志，不阻塞行为写入主流程
+  - 兼容 nil activityRepo（测试场景仍可工作）
+
+#### Commit 2: `test(service)` — DoD 4/5 验收测试
+- `service/race_isolation_test.go`（DoD 4，3 tests）
+  - TestRaceIsolation_CancelVsScanExpired_NoDoubleRollback
+  - TestRaceIsolation_CancelVsPay
+  - TestRaceIsolation_ScanExpiredTwice_Idempotent
+  - 设置：SQLite WAL + busy_timeout + MaxOpenConns=1，CAS 语义匹配生产 MySQL
+- `service/behavior_to_recommendation_test.go`（DoD 5，4 tests）
+  - VIEW 行为 → view_count 增量
+  - 非 VIEW 行为不污染 view_count
+  - nil activityRepo 不 panic
+  - 端到端：200 VIEW for a1 vs 5 for a2 → score(a1) > score(a2)
+- 现有 stub 修复：enrollment_cancel_test.go / order_service_flow_test.go /
+  behavior_service_test.go 全部补齐新接口方法
+
+### 验证（全绿）
+```bash
+go build ./...                        # exit 0
+go vet ./...                          # exit 0
+go vet -tags=integration ./tests/     # exit 0
+go test ./internal/...                # 全 PASS
+go test ./pkg/...                     # 全 PASS
+```
+
+测试增量统计：3 race-isolation + 4 behavior→recommendation = **7 个新测试**
+
+### DoD 6 条最终通过情况
+
+| DoD | 状态 | 关键证据 |
+|---|---|---|
+| 1 订单过期闭环（关闭+回补+通知） | ✅ | service/order_service_flow_test.go + tests/sprint3_order_expire_test.go |
+| 2 ENROLL_SUCCESS / ENROLL_FAIL 通知 | ✅ | worker tests + tests/sprint3_closed_loop_test.go |
+| 3 压测无负库存/重复成功 | ✅ | TestConcurrentEnrollment_Stock1 + JMeter 5000 |
+| 4 取消不与 Pay/ScanExpired 重复回补 | ✅ | race_isolation_test.go (3 tests, 本次新增) |
+| 5 行为 → 推荐排序变化可观测 | ✅ | behavior_to_recommendation_test.go (4 tests, 本次新增) + view_count 修复 |
+| 6 关键节点可被脚本稳定复现 | ✅ | tests/sprint3_*.go + service/*_test.go 系列 |
+
+### Diff 思路
+- 不只是补测试，**先发现断点再修代码**：DoD 5 的测试如果只 stub 出来会自欺欺人，
+  所以先扎实修 view_count 链路再写覆盖测试
+- 并发测试用 SQLite 模拟 MySQL CAS 语义：用 WAL + 单连接强制写入串行化，
+  避免 "database is locked" 噪声但保留真正的乐观锁竞态
+- DoD 5 端到端测试不依赖完整 RecalculateAllScores 调用，
+  只需证明 `view_count → score` 的单调函数性即可证明排序方向
