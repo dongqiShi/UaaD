@@ -762,10 +762,7 @@ erDiagram
     "status": "SELLING_OUT",
     "enroll_count": 67234,
     "stock_remaining": 12766,
-    "created_by": {
-      "user_id": 10,
-      "username": "相信音乐"
-    }
+    "created_by": 10
   }
 }
 ```
@@ -788,8 +785,7 @@ erDiagram
   "data": {
     "activity_id": 3,
     "stock_remaining": 12766,
-    "max_capacity": 80000,
-    "last_updated": "2026-04-10T10:05:32Z"
+    "max_capacity": 80000
   }
 }
 ```
@@ -829,8 +825,7 @@ erDiagram
   "data": {
     "enrollment_id": 100156,
     "status": "QUEUING",
-    "queue_position": 3482,
-    "estimated_wait_seconds": 30
+    "queue_position": 3482
   }
 }
 ```
@@ -876,8 +871,7 @@ erDiagram
     "activity_title": "五月天 2026 巡回演唱会·上海站",
     "status": "QUEUING",
     "queue_position": 2103,
-    "submitted_at": "2026-04-10T10:00:03Z",
-    "estimated_wait_seconds": 15
+    "submitted_at": "2026-04-10T10:00:03Z"
   }
 }
 ```
@@ -895,6 +889,30 @@ erDiagram
   }
 }
 ```
+
+---
+
+#### `POST /enrollments/:id/cancel` — 取消报名（排队/未支付）
+
+| 属性 | 说明 |
+|---|---|
+| **认证** | Need Bearer Token |
+| **支持状态** | `QUEUING` 或 `SUCCESS + PENDING` 订单 |
+| **副作用** | 关闭未支付订单并回补库存；排队中报名直接回补库存 |
+
+**响应 200：**
+```json
+{
+  "code": 0,
+  "message": "ok",
+  "data": {
+    "enrollment_id": 100156,
+    "status": "CANCELLED"
+  }
+}
+```
+
+**响应 400：** 当前状态不可取消（如已支付/已关闭）
 
 ---
 
@@ -1135,9 +1153,9 @@ erDiagram
 
 | 方法 | `type` | `related_id` | 当前调用关系 |
 |---|---|---|---|
-| `NotifyEnrollSuccess(userID, enrollmentID, activityTitle)` | `ENROLL_SUCCESS` | `enrollments.id` | **待接入**：在 `EnrollmentService.Create` 事务提交成功后调用（当前报名主流程未注入通知）。 |
-| `NotifyEnrollFail(userID, enrollmentID, activityTitle)` | `ENROLL_FAIL` | `enrollments.id` | **待接入**：报名/抢票失败、冲正等路径中调用。 |
-| `NotifyOrderExpire(userID, orderID, activityTitle)` | `ORDER_EXPIRE` | `orders.id` | **待接入**：订单过期关单（如 `ScanExpired`）之后调用。 |
+| `NotifyEnrollSuccess(userID, enrollmentID, activityTitle)` | `ENROLL_SUCCESS` | `enrollments.id` | **已接入**：Enrollment Worker 落盘成功后写入。 |
+| `NotifyEnrollFail(userID, enrollmentID, activityTitle)` | `ENROLL_FAIL` | `enrollments.id` | **已接入**：Enrollment Worker 事务失败/补偿路径写入。 |
+| `NotifyOrderExpire(userID, orderID, activityTitle)` | `ORDER_EXPIRE` | `orders.id` | **已接入**：订单过期关单（`ScanExpired`）后写入。 |
 | `NotifyActivityReminder(userID, activityID, activityTitle)` | `ACTIVITY_REMINDER` | `activities.id` | **待接入**：活动提醒定时任务或活动侧逻辑中调用。 |
 
 **状态说明**：通知模块 **HTTP + `NotificationService` 写入方法**已实现；**业务侧调用**（上表「待接入」行）由活动/报名/订单等流程在合适节点注入 `NotificationService` 并调用。`NotifyEnrollSuccess` 与报名服务的接线以 **A/B 组联调**为准（当前默认未在 `enrollment_service` 内调用）。
